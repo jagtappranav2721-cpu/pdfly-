@@ -25,7 +25,7 @@ export default function ExportDialog({ pages, suffix, onClose }: Props) {
     exportPdf(pages, sources, (done, total) => live && setProgress({ done, total }))
       .then((r) => {
         if (!live) return
-        const url = URL.createObjectURL(new Blob([r.bytes], { type: 'application/pdf' }))
+        const url = URL.createObjectURL(new Blob([r.bytes as BlobPart], { type: 'application/pdf' }))
         urlRef.current = url
         setResult({ url, size: r.bytes.byteLength, warnings: r.warnings })
       })
