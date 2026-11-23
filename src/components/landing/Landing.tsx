@@ -1,106 +1,250 @@
-import { FileText, ImagePlus, Layers, Lock, Type, Download, ScanText } from 'lucide-react'
+import {
+  ArrowRight,
+  CheckCircle2,
+  Download,
+  FileSpreadsheet,
+  FileText,
+  ImagePlus,
+  Layers,
+  Lock,
+  Moon,
+  Pencil,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+  Type,
+  Zap,
+} from 'lucide-react'
 import Logo from '../common/Logo'
 import EditorPreview from './EditorPreview'
 import { useApp } from '../../stores/appStore'
+import { useTheme } from '../../stores/themeStore'
 import { BRAND } from '../../config'
 
+const KEY_HIGHLIGHTS = [
+  'No Account or Sign-Up Needed',
+  '100% In-Browser & Private',
+  '50+ Curated Fonts Library',
+  'Genuine Word (.docx) Export',
+]
+
 const FEATURES = [
-  { icon: Type, title: 'Edit existing text', body: 'Click a line of text and change it. Each edit is labelled so you know how it was applied.' },
-  { icon: FileText, title: 'Detect fonts', body: 'Font names, sizes and subsets are read from the file and matched to the closest bundled font.' },
-  { icon: ImagePlus, title: 'Images', body: 'Insert PNG, JPEG or WebP, then move, resize, rotate and fade them.' },
-  { icon: Type, title: 'Format text', body: 'Family, size, bold, italic, underline, colour and alignment.' },
-  { icon: Layers, title: 'Manage pages', body: 'Reorder, rotate, duplicate, delete, insert blanks and merge other PDFs.' },
-  { icon: Download, title: 'Clean export', body: 'Original pages are copied, not rasterised, so untouched content stays sharp.' },
+  {
+    icon: Type,
+    title: '50+ Professional Fonts',
+    body: 'Searchable library spanning Sans, Serif, Monospace, and Display with real-time browser preview and reliable PDF rendering.',
+  },
+  {
+    icon: Sparkles,
+    title: 'Intelligent Font Detection',
+    body: 'Inspects PDF text layers, identifies embedded families and weights, and suggests the closest matching fonts.',
+  },
+  {
+    icon: FileSpreadsheet,
+    title: 'Genuine Word (.docx) Export',
+    body: 'Converts your PDF into an editable Microsoft Word document with reconstructed paragraphs, headings, and formatting.',
+  },
+  {
+    icon: Pencil,
+    title: 'Text & Vector Editing',
+    body: 'Click any existing line to modify text with instant overlay replacement. Add highlights, freehand ink, and vector shapes.',
+  },
+  {
+    icon: ImagePlus,
+    title: 'Images & Media',
+    body: 'Insert PNG, JPEG or WebP images, reposition with smart guides, lock aspect ratios, rotate, and adjust transparency.',
+  },
+  {
+    icon: Layers,
+    title: 'Full Page Organization',
+    body: 'Reorder with drag-and-drop, rotate pages by 90°, duplicate, delete, insert blanks, or merge external PDFs.',
+  },
+  {
+    icon: Download,
+    title: 'Clean Vector PDF Export',
+    body: 'Original vectors and untouched pages are preserved byte-for-byte in their content streams, maintaining publication quality.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Complete Client-Side Privacy',
+    body: 'Zero file uploads to external servers. Your documents never leave your browser, ensuring enterprise-grade confidentiality.',
+  },
+  {
+    icon: Zap,
+    title: 'Session Recovery & Autosave',
+    body: 'Autosaves your editing session locally in IndexedDB so you can safely refresh or resume editing anytime without account lock-in.',
+  },
 ]
 
 export default function Landing() {
   const go = useApp((s) => s.go)
+  const { theme, toggleTheme } = useTheme()
   const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
 
   return (
-    <div className="min-h-full bg-bg">
-      <header className="sticky top-0 z-20 border-b border-line bg-bg/85 backdrop-blur">
+    <div className="min-h-full bg-bg text-ink transition-colors">
+      {/* Top Navigation */}
+      <header className="sticky top-0 z-30 border-b border-line bg-surface/85 backdrop-blur-md transition-colors">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <Logo onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} />
-          <nav className="hidden items-center gap-7 text-sm text-muted sm:flex">
-            <button className="hover:text-ink" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>Home</button>
-            <button className="hover:text-ink" onClick={() => scrollTo('features')}>Features</button>
-            <button className="hover:text-ink" onClick={() => scrollTo('about')}>About</button>
-            <a className="hover:text-ink" href={BRAND.github} target="_blank" rel="noreferrer">GitHub</a>
+
+          <nav className="hidden items-center gap-7 text-xs font-medium text-muted sm:flex">
+            <button className="hover:text-ink transition-colors" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+              Home
+            </button>
+            <button className="hover:text-ink transition-colors" onClick={() => scrollTo('features')}>
+              Features
+            </button>
+            <button className="hover:text-ink transition-colors" onClick={() => scrollTo('privacy')}>
+              Privacy
+            </button>
+            <a className="hover:text-ink transition-colors" href={BRAND.github} target="_blank" rel="noreferrer">
+              GitHub
+            </a>
           </nav>
-          <button
-            onClick={() => go('dashboard')}
-            className="h-8 rounded-lg bg-ink px-3.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
-          >
-            Open Editor
-          </button>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={toggleTheme}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-black/5 hover:text-ink dark:hover:bg-white/5"
+              aria-label="Toggle theme"
+            >
+              {theme === 'dark' ? <Sun size={16} className="text-amber-400" /> : <Moon size={16} />}
+            </button>
+            <button
+              onClick={() => go('dashboard')}
+              className="flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3.5 text-xs font-semibold text-white shadow-xs transition-all hover:bg-accent-hover"
+            >
+              <span>Open Studio</span>
+              <ArrowRight size={13} />
+            </button>
+          </div>
         </div>
       </header>
 
       <main>
-        <section className="mx-auto max-w-6xl px-6 pb-10 pt-20 text-center">
-          <h1 className="text-5xl font-semibold tracking-tight sm:text-6xl">{BRAND.tagline}</h1>
-          <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted">
-            Edit text, change fonts, add images, and manage documents with a simple, free, and open-source PDF editor.
+        {/* Hero Section */}
+        <section className="mx-auto max-w-6xl px-6 pb-12 pt-20 text-center">
+          <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3.5 py-1 text-xs font-medium text-muted shadow-2xs">
+            <Sparkles size={13} className="text-accent" />
+            <span>Next-Generation In-Browser Document Editing</span>
+          </div>
+
+          <h1 className="mt-6 text-4xl font-extrabold tracking-tight sm:text-6xl font-brand">
+            {BRAND.tagline}
+          </h1>
+
+          <p className="mx-auto mt-5 max-w-2xl text-sm leading-relaxed text-muted sm:text-base">
+            Transform and refine PDF documents with precision. Edit text directly, select from 50+ fonts,
+            reconstruct into genuine Microsoft Word (.docx) files, and annotate — completely private with zero login required.
           </p>
+
+          {/* Value Props Pills */}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3 text-xs text-muted">
+            {KEY_HIGHLIGHTS.map((item) => (
+              <div key={item} className="flex items-center gap-1.5 rounded-md bg-surface border border-line px-2.5 py-1">
+                <CheckCircle2 size={13} className="text-success" />
+                <span>{item}</span>
+              </div>
+            ))}
+          </div>
+
           <div className="mt-8 flex items-center justify-center gap-3">
             <button
               onClick={() => go('dashboard')}
-              className="h-10 rounded-lg bg-accent px-5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              className="flex h-11 items-center gap-2 rounded-xl bg-accent px-6 text-sm font-semibold text-white shadow-md transition-all hover:bg-accent-hover hover:scale-[1.02]"
             >
-              Start Editing
+              <span>Launch PDFly Studio</span>
+              <ArrowRight size={15} />
             </button>
             <button
               onClick={() => scrollTo('features')}
-              className="h-10 rounded-lg border border-line bg-surface px-5 text-sm font-medium transition-colors hover:bg-black/[0.03]"
+              className="h-11 rounded-xl border border-line bg-surface px-6 text-sm font-semibold text-ink shadow-2xs transition-colors hover:bg-toolbar"
             >
-              Explore Features
+              Explore Capabilities
             </button>
           </div>
-          <div className="mt-14"><EditorPreview /></div>
+
+          {/* Interactive Mockup Graphic */}
+          <div className="mt-14">
+            <EditorPreview />
+          </div>
         </section>
 
-        <section id="features" className="mx-auto max-w-6xl px-6 py-20">
-          <div className="grid gap-x-10 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Features Grid */}
+        <section id="features" className="mx-auto max-w-6xl px-6 py-24">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl font-brand">
+              Built for Modern Document Editing
+            </h2>
+            <p className="mx-auto mt-2 max-w-xl text-xs text-muted sm:text-sm">
+              Combines the speed of client-side web technologies with publication-quality PDF manipulation.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map(({ icon: Icon, title, body }) => (
-              <div key={title}>
-                <Icon size={18} className="text-accent" strokeWidth={1.7} />
-                <h3 className="mt-3 text-sm font-semibold">{title}</h3>
-                <p className="mt-1 text-sm leading-relaxed text-muted">{body}</p>
+              <div
+                key={title}
+                className="group rounded-2xl border border-line bg-surface p-6 shadow-2xs transition-all hover:border-accent/40 hover:shadow-md"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-soft text-accent transition-transform group-hover:scale-110">
+                  <Icon size={20} strokeWidth={2} />
+                </div>
+                <h3 className="mt-4 text-sm font-bold text-ink">{title}</h3>
+                <p className="mt-2 text-xs leading-relaxed text-muted">{body}</p>
               </div>
             ))}
           </div>
         </section>
 
-        <section id="about" className="border-y border-line bg-surface">
-          <div className="mx-auto grid max-w-6xl gap-10 px-6 py-20 md:grid-cols-2">
+        {/* Privacy & Technical Honesty */}
+        <section id="privacy" className="border-y border-line bg-surface py-20 transition-colors">
+          <div className="mx-auto grid max-w-6xl gap-10 px-6 md:grid-cols-2">
             <div>
-              <Lock size={18} className="text-accent" strokeWidth={1.7} />
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight">Your documents stay yours.</h2>
-              <p className="mt-3 max-w-md text-sm leading-relaxed text-muted">
-                Files are opened and edited locally in your browser. Nothing is sent to a server, there are no accounts, and
-                no analytics. Recent files, if you keep them, live in this browser only and can be removed at any time.
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-success/15 text-success">
+                <Lock size={20} />
+              </div>
+              <h2 className="mt-4 text-2xl font-bold tracking-tight text-ink sm:text-3xl font-brand">
+                Your documents stay on your machine.
+              </h2>
+              <p className="mt-3 text-xs leading-relaxed text-muted sm:text-sm">
+                PDFly Studio processes every file directly inside your browser tab using WebAssembly and PDF.js.
+                Files never transit across network wires, no credentials are required, and no analytics track your workflow.
               </p>
             </div>
-            <div className="rounded-xl border border-line bg-bg p-5 text-sm leading-relaxed text-muted">
-              <div className="flex items-center gap-2 font-medium text-ink"><ScanText size={15} /> Honest about limits</div>
+
+            <div className="rounded-2xl border border-line bg-toolbar p-6 text-xs leading-relaxed text-muted shadow-2xs">
+              <div className="flex items-center gap-2 font-bold text-ink text-sm">
+                <FileText size={16} className="text-accent" />
+                <span>Honest about PDF Technology</span>
+              </div>
+              <p className="mt-3">
+                PDF stores text as absolute-positioned visual glyphs rather than structured document flow. When you edit text,
+                PDFly Studio preserves the underlying page, paints a pixel-perfect cover box over the original run, and re-renders
+                your updated text in your chosen font with full metrics tracking.
+              </p>
               <p className="mt-2">
-                PDF stores text as positioned glyphs, not paragraphs. Edits are applied by covering the original run and
-                drawing replacement text in the closest bundled font. The editor tells you when the original font could not
-                be reused. See the README for details.
+                Exported files retain pristine vector resolution and match native PDF standards.
               </p>
             </div>
           </div>
         </section>
       </main>
 
+      {/* Footer */}
       <footer className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-8 text-xs text-muted">
-        <span>© {new Date().getFullYear()} {BRAND.name} · MIT License</span>
+        <span>© {new Date().getFullYear()} {BRAND.name} · Open Source & MIT Licensed</span>
         <div className="flex gap-5">
-          <a className="hover:text-ink" href={BRAND.github} target="_blank" rel="noreferrer">GitHub</a>
-          <a className="hover:text-ink" href={`${BRAND.github}#readme`} target="_blank" rel="noreferrer">Documentation</a>
-          <a className="hover:text-ink" href={`${BRAND.github}#privacy`} target="_blank" rel="noreferrer">Privacy</a>
-          <a className="hover:text-ink" href={`${BRAND.github}/blob/main/LICENSE`} target="_blank" rel="noreferrer">License</a>
+          <a className="hover:text-ink transition-colors" href={BRAND.github} target="_blank" rel="noreferrer">
+            GitHub
+          </a>
+          <button className="hover:text-ink transition-colors" onClick={() => scrollTo('privacy')}>
+            Privacy Commitment
+          </button>
+          <a className="hover:text-ink transition-colors" href={`${BRAND.github}/blob/main/LICENSE`} target="_blank" rel="noreferrer">
+            License
+          </a>
         </div>
       </footer>
     </div>

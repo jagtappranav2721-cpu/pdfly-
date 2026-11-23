@@ -1,6 +1,7 @@
-/** Branding lives here so it is easy to change. */
+/** Branding and application constants */
 export const BRAND = {
-  name: 'PDFly',
-  tagline: 'Your PDFs. Your Control.',
+  name: 'PDFly Studio',
+  tagline: 'Edit. Refine. Export. All in One Place.',
+  shortTagline: 'Professional In-Browser PDF Editing',
   github: 'https://github.com/your-org/pdfly',
 }

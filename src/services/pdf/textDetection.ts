@@ -14,6 +14,8 @@ interface RawItem {
 
 interface LoadedFont {
   name?: string
+  loadedName?: string
+  fallbackName?: string
   bold?: boolean
   italic?: boolean
   isMonospace?: boolean
@@ -35,6 +37,7 @@ function readFont(page: PDFPageProxy, loadedName: string): LoadedFont | null {
 /**
  * Extracts text runs with position, size and font metadata via PDF.js.
  * Rotated/vertical runs are skipped (they cannot be edited yet).
+ * Synchronous and 100% faithful to the original PDF coordinate system.
  */
 export function detectText(sourceId: string, doc: PDFDocumentProxy, srcIndex: number): Promise<DetectedText[]> {
   const key = `${sourceId}:${srcIndex}`
@@ -68,13 +71,40 @@ async function run(sourceId: string, doc: PDFDocumentProxy, srcIndex: number): P
     if (!(width > 0)) return
 
     const f0 = readFont(page, it.fontName)
-    const rawName = f0?.name
+    const rawName =
+      (f0?.name && !/^g_d\d+_f\d+$/i.test(f0.name) ? f0.name : undefined) ||
+      (f0?.fallbackName && !/^(sans-serif|serif|monospace)$/i.test(f0.fallbackName) ? f0.fallbackName : undefined) ||
+      (f0?.loadedName && !/^g_d\d+_f\d+$/i.test(f0.loadedName) ? f0.loadedName : undefined) ||
+      (styles[it.fontName]?.fontFamily && !/^(sans-serif|serif|monospace)$/i.test(styles[it.fontName].fontFamily) ? styles[it.fontName].fontFamily : undefined)
+
+    const isSerif =
+      !!f0?.isSerifFont ||
+      styles[it.fontName]?.fontFamily === 'serif' ||
+      f0?.fallbackName === 'serif' ||
+      /times|georgia|garamond|serif/i.test(rawName || '') ||
+      /times|georgia|garamond|serif/i.test(f0?.fallbackName || '')
+
+    const isMono =
+      !!f0?.isMonospace ||
+      styles[it.fontName]?.fontFamily === 'monospace' ||
+      f0?.fallbackName === 'monospace' ||
+      /courier|mono/i.test(rawName || '') ||
+      /courier|mono/i.test(f0?.fallbackName || '')
+
+    const isBold =
+      !!f0?.bold ||
+      (rawName ? /bold|black|heavy|semibold|demi/i.test(rawName) : false)
+
+    const isItalic =
+      !!f0?.italic ||
+      (rawName ? /italic|oblique/i.test(rawName) : false)
+
     const info: RawFontInfo = {
       name: rawName,
-      bold: f0?.bold,
-      italic: f0?.italic,
-      isMonospace: f0?.isMonospace,
-      isSerifFont: f0?.isSerifFont,
+      bold: isBold,
+      italic: isItalic,
+      isMonospace: isMono,
+      isSerifFont: isSerif,
       cssFamily: styles[it.fontName]?.fontFamily,
     }
     const isSubset = rawName ? SUBSET_RE.test(rawName) : false

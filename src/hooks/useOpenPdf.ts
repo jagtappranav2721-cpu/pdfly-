@@ -3,6 +3,7 @@ import { openPdfBytes } from '../services/pdf/loader'
 import { saveRecent } from '../services/storage/recent'
 import { useEditor } from '../stores/editorStore'
 import { useApp } from '../stores/appStore'
+import type { SavedSession } from '../services/storage/session'
 
 export function useOpenPdf() {
   const [loading, setLoading] = useState(false)
@@ -24,6 +25,25 @@ export function useOpenPdf() {
     }
   }, [])
 
+  const resumeSession = useCallback(async (session: SavedSession) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const { source } = await openPdfBytes(session.bytes, session.name)
+      useEditor.getState().loadDocument(
+        session.name,
+        source,
+        session.pages,
+        session.currentPageId ?? undefined,
+      )
+      useApp.getState().go('editor')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not restore saved session.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   const openFile = useCallback(
     async (file: File) => {
       const looksLikePdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
@@ -37,5 +57,5 @@ export function useOpenPdf() {
     [openBytes],
   )
 
-  return { openFile, openBytes, loading, error, clearError: () => setError(null) }
+  return { openFile, openBytes, resumeSession, loading, error, clearError: () => setError(null) }
 }

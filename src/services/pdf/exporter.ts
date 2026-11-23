@@ -114,6 +114,22 @@ export async function exportPdf(
       const widths = lines.map((l) => font.widthOfTextAtSize(l, size))
       const w = Math.max(...widths, 1)
       const h = lines.length * LINE_HEIGHT * size
+
+      // Text background highlight if configured
+      if (t.style.backgroundColor) {
+        const p = place(t.x, t.y, w, h, t.rotation, 0, 0)
+        page.drawRectangle({
+          x: p.x,
+          y: p.y,
+          width: w,
+          height: h,
+          rotate: degrees(-t.rotation),
+          color: color(t.style.backgroundColor),
+          borderWidth: 0,
+          opacity: 0.85,
+        })
+      }
+
       lines.forEach((line, i) => {
         if (!line) return
         const lx = t.style.align === 'left' ? 0 : t.style.align === 'center' ? (w - widths[i]) / 2 : w - widths[i]
@@ -123,10 +139,19 @@ export async function exportPdf(
           x: p.x, y: p.y, size, font, color: color(t.style.color),
           opacity: t.opacity, rotate: degrees(-t.rotation),
         })
+
+        // Underline
         if (t.style.underline) {
           const a = place(t.x, t.y, w, h, t.rotation, lx, ly - size * 0.12)
           const b = place(t.x, t.y, w, h, t.rotation, lx + widths[i], ly - size * 0.12)
-          page.drawLine({ start: a, end: b, thickness: Math.max(0.4, size * 0.06), color: color(t.style.color), opacity: t.opacity })
+          page.drawLine({ start: a, end: b, thickness: Math.max(0.6, size * 0.07), color: color(t.style.color), opacity: t.opacity })
+        }
+
+        // Strikethrough
+        if (t.style.strikethrough) {
+          const a = place(t.x, t.y, w, h, t.rotation, lx, ly + size * 0.28)
+          const b = place(t.x, t.y, w, h, t.rotation, lx + widths[i], ly + size * 0.28)
+          page.drawLine({ start: a, end: b, thickness: Math.max(0.6, size * 0.07), color: color(t.style.color), opacity: t.opacity })
         }
       })
     }
@@ -143,6 +168,7 @@ export async function exportPdf(
 
     function drawShape(s: ShapeObj) {
       const isHL = s.shape === 'highlight'
+
       if (s.shape === 'ellipse') {
         const c = toPdf(s.x + s.w / 2, s.y + s.h / 2)
         page.drawEllipse({
@@ -154,6 +180,50 @@ export async function exportPdf(
         })
         return
       }
+
+      if (s.shape === 'line' || s.shape === 'underline' || s.shape === 'strikethrough') {
+        const x1 = s.x1 ?? 0
+        const y1 = s.y1 ?? (s.shape === 'underline' || s.shape === 'strikethrough' ? s.h / 2 : 0)
+        const x2 = s.x2 ?? s.w
+        const y2 = s.y2 ?? (s.shape === 'underline' || s.shape === 'strikethrough' ? s.h / 2 : s.h)
+        const a = place(s.x, s.y, s.w, s.h, s.rotation, x1, y1)
+        const b = place(s.x, s.y, s.w, s.h, s.rotation, x2, y2)
+        page.drawLine({
+          start: a,
+          end: b,
+          thickness: s.strokeWidth || 2,
+          color: color(s.shape === 'strikethrough' ? (s.stroke ?? '#DC2626') : (s.stroke ?? '#2563EB')),
+          opacity: s.opacity,
+        })
+        return
+      }
+
+      if (s.shape === 'arrow') {
+        const x1 = s.x1 ?? 0
+        const y1 = s.y1 ?? 0
+        const x2 = s.x2 ?? s.w
+        const y2 = s.y2 ?? s.h
+        const a = place(s.x, s.y, s.w, s.h, s.rotation, x1, y1)
+        const b = place(s.x, s.y, s.w, s.h, s.rotation, x2, y2)
+        const strokeColor = color(s.stroke ?? '#2563EB')
+        page.drawLine({ start: a, end: b, thickness: s.strokeWidth || 2, color: strokeColor, opacity: s.opacity })
+
+        // Arrow head
+        const angle = Math.atan2(b.y - a.y, b.x - a.x)
+        const headLen = Math.min(12, Math.max(6, (s.strokeWidth || 2) * 3))
+        const arrow1 = {
+          x: b.x - headLen * Math.cos(angle - Math.PI / 6),
+          y: b.y - headLen * Math.sin(angle - Math.PI / 6),
+        }
+        const arrow2 = {
+          x: b.x - headLen * Math.cos(angle + Math.PI / 6),
+          y: b.y - headLen * Math.sin(angle + Math.PI / 6),
+        }
+        page.drawLine({ start: b, end: arrow1, thickness: s.strokeWidth || 2, color: strokeColor, opacity: s.opacity })
+        page.drawLine({ start: b, end: arrow2, thickness: s.strokeWidth || 2, color: strokeColor, opacity: s.opacity })
+        return
+      }
+
       const p = place(s.x, s.y, s.w, s.h, s.rotation, 0, 0)
       page.drawRectangle({
         x: p.x, y: p.y, width: s.w, height: s.h, rotate: degrees(-s.rotation),
@@ -185,4 +255,4 @@ export async function exportPdf(
 }
 
 const WARN_ENC =
-  'Some characters are outside the Latin character set supported by the bundled standard fonts and were replaced with "?".'
+  'Some characters are outside the Latin character set supported by standard PDF fonts and were substituted.'

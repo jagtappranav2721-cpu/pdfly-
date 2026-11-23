@@ -1,11 +1,14 @@
 import { create } from 'zustand'
-import type { PageModel, PageObject, Source, Tool } from '../types'
+import type { PageModel, PageObject, Source, TextObj, TextStyle, Tool } from '../types'
 import { uid } from '../utils/id'
+import { saveSession, clearSavedSession } from '../services/storage/session'
 
 export type FitMode = 'width' | 'page' | 'custom'
 
 /** Pixels per PDF point at 100% zoom (CSS 96dpi vs 72pt). */
 export const BASE_SCALE = 96 / 72
+
+export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error'
 
 interface EditorState {
   fileName: string
@@ -20,13 +23,15 @@ interface EditorState {
   selected: { pageId: string; objId: string } | null
   tool: Tool
   editingId: string | null
-  /** Set while a freshly created object is being typed into for the first time. */
   freshId: string | null
   scale: number
   fitMode: FitMode
   sidebarOpen: boolean
+  rightSidebarOpen: boolean
+  saveStatus: SaveStatus
+  lastSavedAt: number | null
 
-  loadDocument: (name: string, source: Source, pages: PageModel[]) => void
+  loadDocument: (name: string, source: Source, pages: PageModel[], initialCurrentPageId?: string) => void
   reset: () => void
   addSourcePages: (source: Source, pages: PageModel[], afterPageId?: string | null) => void
 
@@ -52,6 +57,14 @@ interface EditorState {
   setScale: (s: number, mode?: FitMode) => void
   setFitMode: (m: FitMode) => void
   toggleSidebar: () => void
+  toggleRightSidebar: () => void
+
+  // Formatting shortcuts
+  toggleSelectedStyle: (prop: 'bold' | 'italic' | 'underline' | 'strikethrough') => boolean
+  updateSelectedStyle: (patch: Partial<TextStyle>) => boolean
+
+  // Saving
+  saveDocument: () => Promise<boolean>
 }
 
 const initial = {
@@ -69,7 +82,10 @@ const initial = {
   freshId: null as string | null,
   scale: BASE_SCALE,
   fitMode: 'width' as FitMode,
-  sidebarOpen: true,
+  sidebarOpen: typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
+  rightSidebarOpen: typeof window !== 'undefined' ? window.innerWidth >= 1024 : true,
+  saveStatus: 'saved' as SaveStatus,
+  lastSavedAt: null as number | null,
 }
 
 const MAX_HISTORY = 100
@@ -77,24 +93,35 @@ const MAX_HISTORY = 100
 export const useEditor = create<EditorState>((set, get) => ({
   ...initial,
 
-  loadDocument: (name, source, pages) =>
+  loadDocument: (name, source, pages, initialCurrentPageId) =>
     set({
       ...initial,
+      sidebarOpen: typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
+      rightSidebarOpen: typeof window !== 'undefined' ? window.innerWidth >= 1024 : true,
       fileName: name,
       sources: { [source.id]: source },
       pages,
-      currentPageId: pages[0]?.id ?? null,
+      currentPageId: initialCurrentPageId ?? pages[0]?.id ?? null,
       fitMode: 'width',
+      saveStatus: 'saved',
+      lastSavedAt: Date.now(),
     }),
 
-  reset: () => set({ ...initial, sources: {} }),
+  reset: () => {
+    void clearSavedSession()
+    set({ ...initial, sources: {} })
+  },
 
   addSourcePages: (source, newPages, afterPageId) => {
     get().checkpoint()
     set((s) => {
       const idx = afterPageId ? s.pages.findIndex((p) => p.id === afterPageId) + 1 : s.pages.length
       const pages = [...s.pages.slice(0, idx), ...newPages, ...s.pages.slice(idx)]
-      return { pages, sources: { ...s.sources, [source.id]: source } }
+      return {
+        pages,
+        sources: { ...s.sources, [source.id]: source },
+        saveStatus: 'unsaved',
+      }
     })
   },
 
@@ -102,13 +129,15 @@ export const useEditor = create<EditorState>((set, get) => ({
   checkpoint: (key) =>
     set((s) => {
       const now = Date.now()
-      // Coalesce rapid edits of the same property (e.g. dragging a colour picker).
-      if (key && key === s.lastKey && now - s.lastAt < 800) return { lastAt: now }
+      if (key && key === s.lastKey && now - s.lastAt < 800) {
+        return { lastAt: now, saveStatus: 'unsaved' }
+      }
       return {
         past: [...s.past, s.pages].slice(-MAX_HISTORY),
         future: [],
         lastKey: key ?? null,
         lastAt: now,
+        saveStatus: 'unsaved',
       }
     }),
 
@@ -132,6 +161,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         selected: null,
         editingId: null,
         currentPageId: s.currentPageId && ids.has(s.currentPageId) ? s.currentPageId : prev[0]?.id ?? null,
+        saveStatus: 'unsaved',
       }
     }),
 
@@ -148,6 +178,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         selected: null,
         editingId: null,
         currentPageId: s.currentPageId && ids.has(s.currentPageId) ? s.currentPageId : next[0]?.id ?? null,
+        saveStatus: 'unsaved',
       }
     }),
 
@@ -155,6 +186,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   addObject: (pageId, obj) =>
     set((s) => ({
       pages: s.pages.map((p) => (p.id === pageId ? { ...p, objects: [...p.objects, obj] } : p)),
+      saveStatus: 'unsaved',
     })),
 
   updateObject: (pageId, objId, patch) =>
@@ -164,6 +196,7 @@ export const useEditor = create<EditorState>((set, get) => ({
           ? { ...p, objects: p.objects.map((o) => (o.id === objId ? ({ ...o, ...patch } as PageObject) : o)) }
           : p,
       ),
+      saveStatus: 'unsaved',
     })),
 
   removeObject: (pageId, objId) =>
@@ -171,6 +204,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       pages: s.pages.map((p) => (p.id === pageId ? { ...p, objects: p.objects.filter((o) => o.id !== objId) } : p)),
       selected: s.selected?.objId === objId ? null : s.selected,
       editingId: s.editingId === objId ? null : s.editingId,
+      saveStatus: 'unsaved',
     })),
 
   // --- pages ---------------------------------------------------------------
@@ -182,12 +216,15 @@ export const useEditor = create<EditorState>((set, get) => ({
       if (!ref) return {}
       const rotated = ref.rotation % 180 !== 0
       const blank: PageModel = {
-        id: uid(), sourceId: null, srcIndex: 0,
+        id: uid(),
+        sourceId: null,
+        srcIndex: 0,
         box: { x0: 0, y0: 0, w: ref.box.w, h: ref.box.h },
-        rotation: rotated ? ref.rotation : 0, objects: [],
+        rotation: rotated ? ref.rotation : 0,
+        objects: [],
       }
       const pages = [...s.pages.slice(0, i + 1), blank, ...s.pages.slice(i + 1)]
-      return { pages, currentPageId: blank.id }
+      return { pages, currentPageId: blank.id, saveStatus: 'unsaved' }
     })
   },
 
@@ -199,7 +236,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       const src = s.pages[i]
       const copy: PageModel = { ...src, id: uid(), objects: src.objects.map((o) => ({ ...o, id: uid() })) }
       const pages = [...s.pages.slice(0, i + 1), copy, ...s.pages.slice(i + 1)]
-      return { pages, currentPageId: copy.id }
+      return { pages, currentPageId: copy.id, saveStatus: 'unsaved' }
     })
   },
 
@@ -210,7 +247,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       const i = s.pages.findIndex((p) => p.id === pageId)
       const pages = s.pages.filter((p) => p.id !== pageId)
       const cur = s.currentPageId === pageId ? pages[Math.min(i, pages.length - 1)].id : s.currentPageId
-      return { pages, currentPageId: cur, selected: null, editingId: null }
+      return { pages, currentPageId: cur, selected: null, editingId: null, saveStatus: 'unsaved' }
     })
   },
 
@@ -218,6 +255,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     get().checkpoint()
     set((s) => ({
       pages: s.pages.map((p) => (p.id === pageId ? { ...p, rotation: (((p.rotation + delta) % 360) + 360) % 360 } : p)),
+      saveStatus: 'unsaved',
     }))
   },
 
@@ -231,18 +269,111 @@ export const useEditor = create<EditorState>((set, get) => ({
       const pages = [...s.pages]
       const [m] = pages.splice(from, 1)
       pages.splice(to, 0, m)
-      return { pages }
+      return { pages, saveStatus: 'unsaved' }
     })
   },
 
   // --- view ----------------------------------------------------------------
   setCurrentPage: (id) => set({ currentPageId: id }),
   select: (sel) => set({ selected: sel }),
-  setTool: (t) => set({ tool: t, editingId: null, selected: t === 'select' ? get().selected : null }),
+  setTool: (t) => set({ tool: t, editingId: null, selected: t === 'select' || t === 'hand' ? get().selected : null }),
   setEditing: (id, fresh = false) => set({ editingId: id, freshId: fresh ? id : null }),
   setScale: (s, mode = 'custom') => set({ scale: Math.min(6, Math.max(0.3, s)), fitMode: mode }),
   setFitMode: (m) => set({ fitMode: m }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+  toggleRightSidebar: () => set((s) => ({ rightSidebarOpen: !s.rightSidebarOpen })),
+
+  // --- text formatting shortcuts --------------------------------------------
+  toggleSelectedStyle: (prop) => {
+    const s = get()
+    let targetObj: TextObj | null = null
+    let targetPageId: string | null = null
+
+    if (s.editingId) {
+      for (const p of s.pages) {
+        const found = p.objects.find((o): o is TextObj => o.id === s.editingId && o.type === 'text')
+        if (found) {
+          targetObj = found
+          targetPageId = p.id
+          break
+        }
+      }
+    } else if (s.selected) {
+      const p = s.pages.find((pg) => pg.id === s.selected!.pageId)
+      const found = p?.objects.find((o): o is TextObj => o.id === s.selected!.objId && o.type === 'text')
+      if (found && p) {
+        targetObj = found
+        targetPageId = p.id
+      }
+    }
+
+    if (!targetObj || !targetPageId) return false
+
+    s.checkpoint(prop + targetObj.id)
+    const currentVal = !!targetObj.style[prop]
+    s.updateObject(targetPageId, targetObj.id, {
+      style: {
+        ...targetObj.style,
+        [prop]: !currentVal,
+      },
+    })
+    return true
+  },
+
+  updateSelectedStyle: (patch) => {
+    const s = get()
+    let targetObj: TextObj | null = null
+    let targetPageId: string | null = null
+
+    if (s.editingId) {
+      for (const p of s.pages) {
+        const found = p.objects.find((o): o is TextObj => o.id === s.editingId && o.type === 'text')
+        if (found) {
+          targetObj = found
+          targetPageId = p.id
+          break
+        }
+      }
+    } else if (s.selected) {
+      const p = s.pages.find((pg) => pg.id === s.selected!.pageId)
+      const found = p?.objects.find((o): o is TextObj => o.id === s.selected!.objId && o.type === 'text')
+      if (found && p) {
+        targetObj = found
+        targetPageId = p.id
+      }
+    }
+
+    if (!targetObj || !targetPageId) return false
+
+    s.checkpoint('style' + targetObj.id)
+    s.updateObject(targetPageId, targetObj.id, {
+      style: {
+        ...targetObj.style,
+        ...patch,
+      },
+    })
+    return true
+  },
+
+  // --- saving ---------------------------------------------------------------
+  saveDocument: async () => {
+    const s = get()
+    if (!s.fileName || !s.pages.length) return false
+    set({ saveStatus: 'saving' })
+    try {
+      const primarySource = Object.values(s.sources)[0]
+      if (primarySource?.bytes) {
+        await saveSession(s.fileName, primarySource.bytes, s.pages, s.currentPageId)
+        set({ saveStatus: 'saved', lastSavedAt: Date.now() })
+        return true
+      }
+      set({ saveStatus: 'saved', lastSavedAt: Date.now() })
+      return true
+    } catch {
+      set({ saveStatus: 'error' })
+      return false
+    }
+  },
 }))
 
 export function selectedObject(): PageObject | null {

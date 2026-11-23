@@ -14,8 +14,8 @@ export default function IconButton({ tip, active, tipPos = 'down', className = '
       aria-label={tip}
       data-tip={tip}
       data-tip-pos={tipPos === 'up' ? 'up' : undefined}
-      className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-[#4a4f58] transition-colors hover:bg-black/5 disabled:opacity-35 disabled:hover:bg-transparent ${
-        active ? 'bg-accent-soft text-accent hover:bg-accent-soft' : ''
+      className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-black/5 hover:text-ink dark:hover:bg-white/5 disabled:opacity-30 disabled:hover:bg-transparent ${
+        active ? 'bg-accent-soft text-accent font-medium shadow-2xs hover:bg-accent-soft' : ''
       } ${className}`}
       {...rest}
     >

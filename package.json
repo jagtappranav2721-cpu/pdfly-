@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@fontsource-variable/inter": "latest",
+    "docx": "^9.16.0",
     "lucide-react": "latest",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "latest",

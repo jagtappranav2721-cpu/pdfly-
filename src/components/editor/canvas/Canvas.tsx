@@ -2,13 +2,15 @@ import { useEffect, useRef } from 'react'
 import { useEditor } from '../../../stores/editorStore'
 import PageView from './PageView'
 
-/** Scroll area holding every page. Handles fit modes and tracks the page nearest the viewport centre. */
+/** Scroll area holding every page. Handles fit modes, panning with hand tool, and tracks the page nearest viewport. */
 export default function Canvas() {
   const pages = useEditor((s) => s.pages)
   const fitMode = useEditor((s) => s.fitMode)
+  const tool = useEditor((s) => s.tool)
   const currentPageId = useEditor((s) => s.currentPageId)
   const scrollRef = useRef<HTMLDivElement>(null)
   const lastScrolledTo = useRef<string | null>(null)
+  const panStart = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null)
 
   // Fit-to-width / fit-to-page recalculation.
   useEffect(() => {
@@ -46,7 +48,10 @@ export default function Canvas() {
         el.querySelectorAll<HTMLElement>('[data-page-id]').forEach((n) => {
           const r = n.getBoundingClientRect()
           const d = mid < r.top ? r.top - mid : mid > r.bottom ? mid - r.bottom : 0
-          if (d < bestD) { bestD = d; best = n.dataset.pageId ?? null }
+          if (d < bestD) {
+            bestD = d
+            best = n.dataset.pageId ?? null
+          }
         })
         if (best && best !== useEditor.getState().currentPageId) {
           lastScrolledTo.current = best
@@ -55,18 +60,61 @@ export default function Canvas() {
       })
     }
     el.addEventListener('scroll', onScroll, { passive: true })
-    return () => { el.removeEventListener('scroll', onScroll); cancelAnimationFrame(raf) }
+    return () => {
+      el.removeEventListener('scroll', onScroll)
+      cancelAnimationFrame(raf)
+    }
   }, [])
 
-  // Scroll to a page chosen from the sidebar (not when the change came from scrolling).
+  // Scroll to a page chosen from the sidebar
   useEffect(() => {
     if (!currentPageId || lastScrolledTo.current === currentPageId) return
-    scrollRef.current?.querySelector(`[data-page-id="${currentPageId}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    scrollRef.current
+      ?.querySelector(`[data-page-id="${currentPageId}"]`)
+      ?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }, [currentPageId])
 
+  // Hand / Pan Tool dragging
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (tool !== 'hand' || e.button !== 0 || !scrollRef.current) return
+    panStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: scrollRef.current.scrollLeft,
+      scrollTop: scrollRef.current.scrollTop,
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!panStart.current || !scrollRef.current) return
+    const dx = e.clientX - panStart.current.x
+    const dy = e.clientY - panStart.current.y
+    scrollRef.current.scrollLeft = panStart.current.scrollLeft - dx
+    scrollRef.current.scrollTop = panStart.current.scrollTop - dy
+  }
+
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!panStart.current) return
+    panStart.current = null
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch {
+      /* ignore */
+    }
+  }
+
   return (
-    <div ref={scrollRef} className="thin-scroll min-h-0 flex-1 overflow-auto bg-[#eceef2]">
-      <div className="mx-auto flex w-max min-w-full flex-col items-center gap-5 px-8 py-6">
+    <div
+      ref={scrollRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      className={`thin-scroll document-canvas-container min-h-0 flex-1 overflow-auto bg-bg transition-colors ${
+        tool === 'hand' ? 'cursor-grab active:cursor-grabbing' : ''
+      }`}
+    >
+      <div className="mx-auto flex w-max min-w-full flex-col items-center gap-6 px-8 py-8">
         {pages.map((p) => (
           <PageView key={p.id} page={p} />
         ))}

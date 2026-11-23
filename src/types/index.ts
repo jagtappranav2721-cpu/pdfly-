@@ -5,21 +5,25 @@ export type FontStatus = 'original-available' | 'similar' | 'substituted' | 'unk
 export type Align = 'left' | 'center' | 'right'
 
 export interface TextStyle {
-  family: StdFont
+  family: string
   size: number
   bold: boolean
   italic: boolean
   underline: boolean
+  strikethrough?: boolean
+  backgroundColor?: string | null
   color: string
   align: Align
 }
 
 export interface FontMatch {
-  family: StdFont
+  family: string
+  stdFamily: StdFont
   bold: boolean
   italic: boolean
   status: FontStatus
   note: string
+  recommendedFont?: string
 }
 
 /** Information about the original run an edited text object replaced. */
@@ -63,12 +67,16 @@ export interface ImageObj extends BaseObj {
 
 export interface ShapeObj extends BaseObj {
   type: 'shape'
-  shape: 'rect' | 'ellipse' | 'highlight'
+  shape: 'rect' | 'ellipse' | 'highlight' | 'line' | 'arrow' | 'underline' | 'strikethrough'
   w: number
   h: number
   fill: string | null
   stroke: string | null
   strokeWidth: number
+  x1?: number // Relative start x inside bounding box
+  y1?: number // Relative start y inside bounding box
+  x2?: number // Relative end x inside bounding box
+  y2?: number // Relative end y inside bounding box
 }
 
 export interface PathObj extends BaseObj {
@@ -103,7 +111,20 @@ export interface Source {
   doc: PDFDocumentProxy
 }
 
-export type Tool = 'select' | 'edit-text' | 'add-text' | 'highlight' | 'rect' | 'ellipse' | 'draw'
+export type Tool =
+  | 'select'
+  | 'hand'
+  | 'edit-text'
+  | 'add-text'
+  | 'highlight'
+  | 'underline'
+  | 'strikethrough'
+  | 'rect'
+  | 'ellipse'
+  | 'line'
+  | 'arrow'
+  | 'draw'
+  | 'eraser'
 
 export interface DetectedText {
   key: string

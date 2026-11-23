@@ -12,7 +12,8 @@ import { prepareImage, makeImageObject } from '../../../services/pdf/images'
 import ObjectView from './ObjectView'
 
 type Draft =
-  | { kind: 'box'; shape: ShapeObj['shape']; x0: number; y0: number; x: number; y: number }
+  | { kind: 'box'; shape: 'rect' | 'ellipse' | 'highlight'; x0: number; y0: number; x: number; y: number }
+  | { kind: 'line'; shape: 'line' | 'arrow' | 'underline' | 'strikethrough'; x0: number; y0: number; x: number; y: number }
   | { kind: 'path'; points: { x: number; y: number }[] }
 
 function PageView({ page }: { page: PageModel }) {
@@ -40,7 +41,9 @@ function PageView({ page }: { page: PageModel }) {
     detectText(source.id, source.doc, page.srcIndex)
       .then((d) => live && setDetected(d))
       .catch(() => live && setDetected([]))
-    return () => { live = false }
+    return () => {
+      live = false
+    }
   }, [tool, visible, source, page.srcIndex])
 
   const rotated = page.rotation % 180 !== 0
@@ -74,15 +77,34 @@ function PageView({ page }: { page: PageModel }) {
     const canvas = getCanvas(page.id)
     const sample = canvas
       ? sampleColors(canvas, page.box.w, page.box.h, { x: d.x, y: d.y, w: d.w, h: d.h })
-      : { background: '#ffffff', text: '#000000', textEstimated: true }
+      : { background: '#ffffff', text: '#0F172A', textEstimated: true }
+
     const obj: TextObj = {
-      id: uid(), type: 'text', x: d.x, y: boxTopForBaseline(d.baseline, d.size), rotation: 0, opacity: 1,
+      id: uid(),
+      type: 'text',
+      x: d.x,
+      y: boxTopForBaseline(d.baseline, d.size),
+      rotation: 0,
+      opacity: 1,
       text: d.text,
-      style: { family: d.match.family, size: d.size, bold: d.match.bold, italic: d.match.italic, underline: false, color: sample.text, align: 'left' },
+      style: {
+        family: d.match.family,
+        size: d.size,
+        bold: d.match.bold,
+        italic: d.match.italic,
+        underline: false,
+        color: sample.text,
+        align: 'left',
+      },
       cover: { x: d.x - 0.5, y: d.y, w: d.w + 1, h: d.h, color: sample.background },
       original: {
-        itemKey: d.key, text: d.text, fontName: d.fontName, isSubset: d.isSubset, embedded: d.embedded,
-        match: d.match, colorEstimated: sample.textEstimated,
+        itemKey: d.key,
+        text: d.text,
+        fontName: d.fontName,
+        isSubset: d.isSubset,
+        embedded: d.embedded,
+        match: d.match,
+        colorEstimated: sample.textEstimated,
       },
     }
     st.checkpoint()
@@ -96,14 +118,48 @@ function PageView({ page }: { page: PageModel }) {
     const st = useEditor.getState()
     st.setCurrentPage(page.id)
     const p = toPage(e)
-    if (tool === 'select' || tool === 'edit-text') {
+
+    if (tool === 'select' || tool === 'edit-text' || tool === 'hand') {
       st.select(null)
       return
     }
+
+    if (tool === 'eraser') {
+      // Find top-most object near clicked point and delete it
+      const hit = [...page.objects].reverse().find((o) => {
+        if (o.type === 'shape' || o.type === 'image') {
+          return p.x >= o.x && p.x <= o.x + o.w && p.y >= o.y && p.y <= o.y + o.h
+        }
+        if (o.type === 'text') {
+          return p.x >= o.x && p.x <= o.x + 120 && p.y >= o.y && p.y <= o.y + (o.style.size || 14) * 1.5
+        }
+        return false
+      })
+      if (hit) {
+        st.checkpoint()
+        st.removeObject(page.id, hit.id)
+      }
+      return
+    }
+
     if (tool === 'add-text') {
       const obj: TextObj = {
-        id: uid(), type: 'text', x: p.x, y: p.y, rotation: 0, opacity: 1, text: '',
-        style: { family: 'Helvetica', size: 16, bold: false, italic: false, underline: false, color: '#17191d', align: 'left' },
+        id: uid(),
+        type: 'text',
+        x: p.x,
+        y: p.y,
+        rotation: 0,
+        opacity: 1,
+        text: '',
+        style: {
+          family: 'Montserrat',
+          size: 16,
+          bold: false,
+          italic: false,
+          underline: false,
+          color: '#0F172A',
+          align: 'left',
+        },
       }
       st.checkpoint()
       st.addObject(page.id, obj)
@@ -111,15 +167,33 @@ function PageView({ page }: { page: PageModel }) {
       st.setEditing(obj.id, true)
       return
     }
+
     e.currentTarget.setPointerCapture(e.pointerId)
-    if (tool === 'draw') setDraft({ kind: 'path', points: [p] })
-    else setDraft({ kind: 'box', shape: tool === 'highlight' ? 'highlight' : tool === 'ellipse' ? 'ellipse' : 'rect', x0: p.x, y0: p.y, x: p.x, y: p.y })
+
+    if (tool === 'draw') {
+      setDraft({ kind: 'path', points: [p] })
+    } else if (tool === 'line' || tool === 'arrow' || tool === 'underline' || tool === 'strikethrough') {
+      setDraft({ kind: 'line', shape: tool, x0: p.x, y0: p.y, x: p.x, y: p.y })
+    } else {
+      setDraft({
+        kind: 'box',
+        shape: tool === 'highlight' ? 'highlight' : tool === 'ellipse' ? 'ellipse' : 'rect',
+        x0: p.x,
+        y0: p.y,
+        x: p.x,
+        y: p.y,
+      })
+    }
   }
 
   const onOverlayMove = (e: React.PointerEvent) => {
     if (!draft) return
     const p = toPage(e)
-    setDraft(draft.kind === 'path' ? { kind: 'path', points: [...draft.points, p] } : { ...draft, x: p.x, y: p.y })
+    setDraft(
+      draft.kind === 'path'
+        ? { kind: 'path', points: [...draft.points, p] }
+        : { ...draft, x: p.x, y: p.y },
+    )
   }
 
   const onOverlayUp = (e: React.PointerEvent) => {
@@ -127,9 +201,56 @@ function PageView({ page }: { page: PageModel }) {
     e.currentTarget.releasePointerCapture(e.pointerId)
     const st = useEditor.getState()
     let obj: PageObject | null = null
+
     if (draft.kind === 'path') {
       if (draft.points.length > 2) {
-        obj = { id: uid(), type: 'path', x: 0, y: 0, rotation: 0, opacity: 1, points: draft.points, color: '#17191d', width: 2 } as PathObj
+        obj = {
+          id: uid(),
+          type: 'path',
+          x: 0,
+          y: 0,
+          rotation: 0,
+          opacity: 1,
+          points: draft.points,
+          color: '#0F172A',
+          width: 2,
+        } as PathObj
+      }
+    } else if (draft.kind === 'line') {
+      const bw = Math.abs(draft.x - draft.x0)
+      const bh = Math.abs(draft.y - draft.y0)
+      const dist = Math.hypot(draft.x - draft.x0, draft.y - draft.y0)
+      if (dist > 3 || bw > 3 || bh > 3) {
+        const minX = Math.min(draft.x, draft.x0)
+        const minY = Math.min(draft.y, draft.y0)
+        const w = Math.max(bw, 4)
+        const h = Math.max(bh, 4)
+        const isUnderline = draft.shape === 'underline'
+        const isStrikethrough = draft.shape === 'strikethrough'
+
+        const x1 = isUnderline || isStrikethrough ? 0 : draft.x0 - minX
+        const y1 = isUnderline || isStrikethrough ? h / 2 : draft.y0 - minY
+        const x2 = isUnderline || isStrikethrough ? w : draft.x - minX
+        const y2 = isUnderline || isStrikethrough ? h / 2 : draft.y - minY
+
+        obj = {
+          id: uid(),
+          type: 'shape',
+          shape: draft.shape,
+          x: minX,
+          y: minY,
+          w,
+          h,
+          x1,
+          y1,
+          x2,
+          y2,
+          rotation: 0,
+          opacity: 1,
+          fill: null,
+          stroke: isStrikethrough ? '#DC2626' : '#2563EB',
+          strokeWidth: 2,
+        }
       }
     } else {
       const bw = Math.abs(draft.x - draft.x0)
@@ -137,23 +258,44 @@ function PageView({ page }: { page: PageModel }) {
       if (bw > 3 && bh > 3) {
         const hl = draft.shape === 'highlight'
         obj = {
-          id: uid(), type: 'shape', shape: draft.shape, x: Math.min(draft.x, draft.x0), y: Math.min(draft.y, draft.y0),
-          w: bw, h: bh, rotation: 0, opacity: hl ? 0.45 : 1,
-          fill: hl ? '#ffe14d' : null, stroke: hl ? null : '#635bff', strokeWidth: 2,
+          id: uid(),
+          type: 'shape',
+          shape: draft.shape,
+          x: Math.min(draft.x, draft.x0),
+          y: Math.min(draft.y, draft.y0),
+          w: bw,
+          h: bh,
+          rotation: 0,
+          opacity: hl ? 0.45 : 1,
+          fill: hl ? '#ffe14d' : null,
+          stroke: hl ? null : '#2563EB',
+          strokeWidth: 2,
         }
       }
     }
+
     setDraft(null)
     if (obj) {
       st.checkpoint()
       st.addObject(page.id, obj)
       st.select({ pageId: page.id, objId: obj.id })
       st.setTool('select')
-      st.select({ pageId: page.id, objId: obj.id })
     }
   }
 
-  const cursor = tool === 'select' || tool === 'edit-text' ? 'default' : tool === 'add-text' ? 'text' : 'crosshair'
+  const cursor =
+    tool === 'select'
+      ? 'default'
+      : tool === 'hand'
+      ? 'grab'
+      : tool === 'edit-text'
+      ? 'default'
+      : tool === 'add-text'
+      ? 'text'
+      : tool === 'eraser'
+      ? 'pointer'
+      : 'crosshair'
+
   const texts = page.objects.filter((o): o is TextObj => o.type === 'text')
   const paths = page.objects.filter((o): o is PathObj => o.type === 'path')
 
@@ -163,7 +305,9 @@ function PageView({ page }: { page: PageModel }) {
       data-page-id={page.id}
       style={{ width: outerW, height: outerH, position: 'relative' }}
       className="shrink-0"
-      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault() }}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) e.preventDefault()
+      }}
       onDrop={async (e) => {
         const file = [...e.dataTransfer.files].find((f) => f.type.startsWith('image/'))
         if (!file) return
@@ -176,85 +320,142 @@ function PageView({ page }: { page: PageModel }) {
           st.addObject(page.id, obj)
           st.select({ pageId: page.id, objId: obj.id })
         } catch {
-          /* unsupported image: ignore the drop */
+          /* unsupported image */
         }
       }}
     >
       <div
         ref={inner}
-        className="absolute bg-white shadow-[0_1px_3px_rgba(23,25,29,0.12),0_8px_24px_-8px_rgba(23,25,29,0.12)]"
+        className="document-page absolute bg-white shadow-[0_2px_8px_rgba(15,23,42,0.08),0_12px_32px_-4px_rgba(15,23,42,0.12)] ring-1 ring-slate-900/5"
         style={{
-          width: w, height: h, left: (outerW - w) / 2, top: (outerH - h) / 2,
+          width: w,
+          height: h,
+          left: (outerW - w) / 2,
+          top: (outerH - h) / 2,
           transform: page.rotation ? `rotate(${page.rotation}deg)` : undefined,
         }}
       >
-        <canvas ref={canvasRef} style={{ width: w, height: h, display: 'block' }} />
+        <canvas ref={canvasRef} style={{ width: w, height: h, display: 'block', position: 'absolute', inset: 0, pointerEvents: 'none' }} />
 
-        {/* cover patches for overlay-based text replacement */}
-        {texts.map((t) =>
-          t.cover ? (
-            <div
-              key={'c' + t.id}
-              style={{ position: 'absolute', left: t.cover.x * scale, top: t.cover.y * scale, width: t.cover.w * scale, height: t.cover.h * scale, background: t.cover.color, pointerEvents: 'none' }}
-            />
-          ) : null,
+        {/* Text cover boxes (for inline replaced text) */}
+        {texts.map(
+          (t) =>
+            t.cover && (
+              <div
+                key={'cov-' + t.id}
+                style={{
+                  position: 'absolute',
+                  left: t.cover.x * scale,
+                  top: t.cover.y * scale,
+                  width: t.cover.w * scale,
+                  height: t.cover.h * scale,
+                  background: t.cover.color,
+                  pointerEvents: 'none',
+                }}
+              />
+            ),
         )}
 
+        {/* Interactive editing layer */}
         <div
-          className="absolute inset-0"
-          style={{ cursor, touchAction: tool === 'select' || tool === 'edit-text' ? 'auto' : 'none' }}
+          className="absolute inset-0 select-none"
+          style={{ cursor }}
           onPointerDown={onOverlayDown}
           onPointerMove={onOverlayMove}
           onPointerUp={onOverlayUp}
         >
-          {/* freehand paths */}
-          <svg className="absolute inset-0 overflow-visible" width={w} height={h} style={{ pointerEvents: 'none' }}>
+          {/* SVG layer for freehand drawings */}
+          <svg className="absolute inset-0 pointer-events-none" style={{ width: '100%', height: '100%' }}>
             {paths.map((p) => (
               <polyline
                 key={p.id}
                 points={p.points.map((pt) => `${pt.x * scale},${pt.y * scale}`).join(' ')}
-                fill="none" stroke={p.color} strokeWidth={p.width * scale} strokeLinecap="round" strokeLinejoin="round"
+                fill="none"
+                stroke={p.color}
+                strokeWidth={p.width * scale}
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 opacity={p.opacity}
-                style={{ pointerEvents: tool === 'select' ? 'stroke' : 'none', cursor: 'pointer', outline: selectedId === p.id ? '1px solid #635bff' : undefined }}
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  useEditor.getState().select({ pageId: page.id, objId: p.id })
+                style={{
+                  outline: selectedId === p.id ? '2px solid #2563EB' : undefined,
                 }}
               />
             ))}
-            {draft?.kind === 'path' && (
-              <polyline points={draft.points.map((pt) => `${pt.x * scale},${pt.y * scale}`).join(' ')} fill="none" stroke="#17191d" strokeWidth={2 * scale} strokeLinecap="round" strokeLinejoin="round" />
+            {draft?.kind === 'path' && draft.points.length > 1 && (
+              <polyline
+                points={draft.points.map((pt) => `${pt.x * scale},${pt.y * scale}`).join(' ')}
+                fill="none"
+                stroke="#0F172A"
+                strokeWidth={2 * scale}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             )}
           </svg>
 
+          {/* Render Page Objects */}
           {page.objects.map((o) => (
             <ObjectView key={o.id} obj={o} pageId={page.id} pageRotation={page.rotation} scale={scale} />
           ))}
 
-          {/* clickable text runs */}
+          {/* Clickable text runs for Edit text tool */}
           {tool === 'edit-text' &&
             detected.map((d) =>
               editedKeys.has(d.key) ? null : (
                 <button
                   key={d.key}
                   type="button"
-                  title={`${d.fontName} · ${d.size.toFixed(1)}pt`}
+                  title={`${d.fontName} · ${d.size.toFixed(1)}pt · Click to edit`}
                   onClick={() => startEditExisting(d)}
-                  className="absolute rounded-[2px] border border-transparent transition-colors hover:border-accent hover:bg-accent/10"
+                  className="absolute rounded-[2px] border border-transparent transition-colors hover:border-accent hover:bg-accent/15"
                   style={{ left: d.x * scale, top: d.y * scale, width: d.w * scale, height: d.h * scale, cursor: 'text' }}
                 />
               ),
             )}
 
+          {/* Drafting feedback */}
           {draft?.kind === 'box' && (
             <div
               style={{
-                position: 'absolute', left: Math.min(draft.x, draft.x0) * scale, top: Math.min(draft.y, draft.y0) * scale,
-                width: Math.abs(draft.x - draft.x0) * scale, height: Math.abs(draft.y - draft.y0) * scale,
-                border: '1.5px solid #635bff', background: draft.shape === 'highlight' ? 'rgba(255,225,77,0.45)' : 'rgba(99,91,255,0.06)',
-                borderRadius: draft.shape === 'ellipse' ? '50%' : 0, pointerEvents: 'none',
+                position: 'absolute',
+                left: Math.min(draft.x, draft.x0) * scale,
+                top: Math.min(draft.y, draft.y0) * scale,
+                width: Math.abs(draft.x - draft.x0) * scale,
+                height: Math.abs(draft.y - draft.y0) * scale,
+                border: '1.5px solid #2563EB',
+                background: draft.shape === 'highlight' ? 'rgba(255,225,77,0.45)' : 'rgba(37,99,235,0.08)',
+                borderRadius: draft.shape === 'ellipse' ? '50%' : 0,
+                pointerEvents: 'none',
               }}
             />
+          )}
+
+          {draft?.kind === 'line' && (
+            <svg className="absolute inset-0 overflow-visible pointer-events-none" style={{ width: '100%', height: '100%' }}>
+              <defs>
+                <marker
+                  id="draft-arrow-head"
+                  markerWidth="10"
+                  markerHeight="10"
+                  refX="8"
+                  refY="5"
+                  orient="auto"
+                  markerUnits="userSpaceOnUse"
+                >
+                  <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill={draft.shape === 'strikethrough' ? '#DC2626' : '#2563EB'} />
+                </marker>
+              </defs>
+              <line
+                x1={draft.x0 * scale}
+                y1={draft.y0 * scale}
+                x2={draft.x * scale}
+                y2={draft.y * scale}
+                stroke={draft.shape === 'strikethrough' ? '#DC2626' : '#2563EB'}
+                strokeWidth={2 * scale}
+                strokeLinecap="round"
+                markerEnd={draft.shape === 'arrow' ? 'url(#draft-arrow-head)' : undefined}
+              />
+            </svg>
           )}
         </div>
       </div>
