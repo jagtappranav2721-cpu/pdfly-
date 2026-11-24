@@ -126,8 +126,7 @@ function commitText(pageId: string, obj: TextObj, raw: string, preserveSelection
   const styleUnchanged = obj.original
     ? obj.style.family === obj.original.match.family &&
       obj.style.bold === obj.original.match.bold &&
-      obj.style.italic === obj.original.match.italic &&
-      obj.style.size === obj.original.size
+      obj.style.italic === obj.original.match.italic
     : true
 
   // If nothing was actually edited or changed, discard the object and history entry

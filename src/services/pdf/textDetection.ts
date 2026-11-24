@@ -71,11 +71,12 @@ async function run(sourceId: string, doc: PDFDocumentProxy, srcIndex: number): P
     if (!(width > 0)) return
 
     const f0 = readFont(page, it.fontName)
+    const fontFam = styles[it.fontName]?.fontFamily
     const rawName =
       (f0?.name && !/^g_d\d+_f\d+$/i.test(f0.name) ? f0.name : undefined) ||
       (f0?.fallbackName && !/^(sans-serif|serif|monospace)$/i.test(f0.fallbackName) ? f0.fallbackName : undefined) ||
       (f0?.loadedName && !/^g_d\d+_f\d+$/i.test(f0.loadedName) ? f0.loadedName : undefined) ||
-      (styles[it.fontName]?.fontFamily && !/^(sans-serif|serif|monospace)$/i.test(styles[it.fontName].fontFamily) ? styles[it.fontName].fontFamily : undefined)
+      (fontFam && !/^(sans-serif|serif|monospace)$/i.test(fontFam) ? fontFam : undefined)
 
     const isSerif =
       !!f0?.isSerifFont ||
